@@ -1,0 +1,19 @@
+BRICKFACE,SKY,FOLIAGE,CEMENT,WINDOW,PATH,GRASS.
+region_centroid_col: continuous.
+region_centroid_row: continuous.
+short_line_density_5: continuous.
+short_line_density_2: continuous.
+vedge_mean: continuous.
+vegde_sd: continuous.
+hedge_mean: continuous.
+hedge_sd: continuous.
+intensity_mean: continuous.
+rawred_mean: continuous.
+rawblue_mean: continuous.
+rawgreen_mean: continuous.
+exred_mean: continuous.
+exblue_mean: continuous.
+exgreen_mean: continuous.
+value_mean: continuous.
+saturation_mean: continuous.
+hue_mean: continuous.

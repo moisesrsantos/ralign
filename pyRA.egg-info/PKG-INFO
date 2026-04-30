@@ -1,0 +1,73 @@
+Metadata-Version: 2.4
+Name: pyRA
+Version: 0.1.0
+Summary: Utilities to generate synthetic tabular samples and compute model alignment (Rashomon alignment).
+Author-email: Moises Santos <moises0rocha@gmail.com>
+License: MIT
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: numpy>=1.23
+Requires-Dist: pandas>=1.5
+Requires-Dist: scikit-learn>=1.2
+Requires-Dist: matplotlib>=3.5
+Requires-Dist: umap-learn>=0.5.4
+Dynamic: license-file
+
+pyRA
+=====
+
+Small utilities for comparing model predictions via alignment metrics (Jaccard, Cohen's kappa) on generated or custom data. Includes a UMAP/TSNE visualization helper for understanding model agreement.
+
+Installation
+------------
+
+Install from source (recommended in a virtual environment):
+
+```
+pip install build
+python -m build
+pip install dist/pyRA-0.1.0-py3-none-any.whl
+```
+
+Or install dependencies for development:
+
+```
+pip install -r requirements.txt
+```
+
+Quick Start
+-----------
+
+```python
+from pyRA import RashomonAlignment
+import numpy as np
+
+# Compare two predictions using alignment metrics
+pred_a = np.array([0, 1, 1, 0, 1])
+pred_b = np.array([0, 1, 0, 0, 1])
+
+# Jaccard similarity
+jaccard = RashomonAlignment.distributional(pred_a, pred_b, method="jaccard")
+print(f"Jaccard similarity: {jaccard}")
+
+# Cohen's kappa
+kappa = RashomonAlignment.distributional(pred_a, pred_b, method="cohen_kappa")
+print(f"Cohen's kappa: {kappa}")
+```
+
+Core Methods
+-----------
+
+All methods are accessed through the `RashomonAlignment` class:
+
+- `distributional(a, b, method="jaccard")` - Compute alignment metrics between two predictions
+- `generate_uniform_samples(df, n_samples=1000, ...)` - Generate synthetic data from observed ranges
+- `apply_models_to_generated(models, X)` - Apply multiple models to data
+- `geometric(models, df, feature_cols, n_samples=1000, ...)` - Complete pipeline: generate data, apply models, compute alignment
+- `plot_models(compare_result, feature_cols, ...)` - Visualize model predictions and agreement via UMAP/TSNE
+
+Example with Real Data
+---------------------
+
+See [examples/openml_example.py](examples/openml_example.py) for a complete example using OpenML datasets and models.

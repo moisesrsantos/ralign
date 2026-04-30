@@ -1,0 +1,11 @@
+c0,c1,c2,c3,c4,c5.
+mod_zurich_class: A,B,C,D,E,F,H.
+largest_spot: X,R,S,A,H,K.
+spot_distribution: X,O,I,C.
+activity: a1,a2.
+evolution: a1,a2,a3.
+previous_day: a1,a2,a3.
+hist_complex: a1,a2.
+become_hist_complex: a1,a2.
+area: a1,a2.
+area_largest: a1,a2.

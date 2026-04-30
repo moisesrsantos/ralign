@@ -1,0 +1,14 @@
+c1,c2,c3.
+Alcohol: continuous.
+Malic_acid: continuous.
+Ash: continuous.
+Alcalinity_of_ash: continuous.
+Magnesium: continuous.
+Total_phenols: continuous.
+Flavanoids: continuous.
+Nonflavanoid_phenols: continuous.
+Proanthocyanins: continuous.
+Color_intensity: continuous.
+Hue: continuous.
+OD280_OD315_of_diluted_wines: continuous.
+Proline: continuous.

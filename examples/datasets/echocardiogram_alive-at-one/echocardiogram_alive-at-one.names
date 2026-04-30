@@ -1,0 +1,10 @@
+c0,c1.
+age_at_heart_attack: continuous.
+pericardial_effusion: v0,v1.
+fractional_shortening: continuous.
+epss: continuous.
+lvdd: continuous.
+wall_motion_score: continuous.
+wall_motion_index: continuous.
+mult: continuous.
+group: continuous.

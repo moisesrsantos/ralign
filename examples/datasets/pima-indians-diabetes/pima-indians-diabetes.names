@@ -1,0 +1,9 @@
+c0,c1.
+Number_of_times_pregnant: continuous.
+Plasma_glucose_concentration: continuous.
+Diastolic_blood_pressure: continuous.
+Triceps_skin_fold_thickness: continuous.
+Two_Hour_serum_insulin: continuous.
+Body_mass_index: continuous.
+Diabetes_pedigree_function: continuous.
+Age: continuous.

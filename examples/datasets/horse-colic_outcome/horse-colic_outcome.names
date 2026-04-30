@@ -1,0 +1,24 @@
+c1,c2,c3.
+surgery: v1,v2.
+Age: v1,v9.
+Hospital_Number: continuous.
+rectal_temperature: continuous.
+pulse: continuous.
+respiratory_rate: continuous.
+temperature_of_extremities: v1,v2,v3,v4.
+peripheral_pulse: v1,v2,v3,v4.
+mucous_membranes: v1,v2,v3,v4,v5,v6.
+capillary_refill_time: v1,v2,v3.
+pain: continuous.
+peristalsis: v1,v2,v3,v4.
+abdominal_distension: v1,v2,v3,v4.
+nasogastric_tube: v1,v2,v3.
+nasogastric_reflux: v1,v2,v3.
+nasogastric_reflux_PH: continuous.
+rectal_examination: v1,v2,v3,v4.
+abdomen: v1,v2,v3,v4,v5.
+packed_cell_volume: continuous.
+total_protein: continuous.
+abdominocentesis_appearance: v1,v2,v3.
+abdomcentesis_total_protein: continuous.
+cp_data: v1,v2.

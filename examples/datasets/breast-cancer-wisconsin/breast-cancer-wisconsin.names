@@ -1,0 +1,10 @@
+c2,c4.
+Clump_Thickness: continuous.
+Uniformity_Cell_Size: continuous.
+Uniformity_Cell_Shape: continuous.
+Marginal_Adhesion: continuous.
+Single_Epithelial_Cell_Size: continuous.
+Bare_Nuclei: continuous.
+Bland_Chromatin: continuous.
+Normal_Nucleoli: continuous.
+Mitoses: continuous.

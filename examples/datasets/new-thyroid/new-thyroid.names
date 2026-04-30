@@ -1,0 +1,6 @@
+c1,c2,c3.
+T3_resin_uptake_test: continuous.
+Total_Serum_thyroxin: continuous.
+Total_serum_triiodothyronine: continuous.
+TSH: continuous.
+Maximal_absolute_difference_of_TSH: continuous.

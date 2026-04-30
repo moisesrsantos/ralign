@@ -1,0 +1,7 @@
+unacc,acc,good,vgood.
+buying: vhigh,high,med,low.
+maint: vhigh,high,med,low.
+doors: n_2,n_3,n_4,n_5more.
+persons: n_2,n_4,more.
+lug_boot: small,med,big.
+safety: low,med,high.

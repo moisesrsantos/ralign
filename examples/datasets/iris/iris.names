@@ -1,0 +1,5 @@
+Iris_setosa,Iris_versicolor,Iris_virginica.
+sepal_length: continuous.
+sepal_width: continuous.
+petal_length: continuous.
+petal_width: continuous.
