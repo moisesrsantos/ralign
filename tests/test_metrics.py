@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from pyRA.metrics import RashomonAlignment
+from ralign.metrics import RashomonAlignment
 
 
 class FakePredict:

@@ -1,7 +1,7 @@
-pyRA — Rashomon Alignment
-=========================
+ralign — Rashomon Alignment
+===========================
 
-**pyRA** is a Python package implementing *Rashomon Alignment* (RA), a framework for measuring functional similarity between classification models by comparing their decision boundaries rather than their predictive accuracy.
+**ralign** is a Python package implementing *Rashomon Alignment* (RA), a framework for measuring functional similarity between classification models by comparing their decision boundaries rather than their predictive accuracy.
 
 > Soares, C., van der Putten, P., Pfahringer, B., & Santos, M. (2026).
 > **Rashomon Alignment**.
@@ -33,18 +33,16 @@ A high dRA with low gRA indicates models that agree where data lies but disagree
 
 ## Installation
 
-Install from source (recommended inside a virtual environment):
-
 ```bash
-pip install build
-python -m build
-pip install dist/pyRA-0.1.0-py3-none-any.whl
+pip install ralign
 ```
 
-Or install dependencies for development:
+For development (includes test and build tools):
 
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/mmrsantos/ralign.git
+cd ralign
+pip install -e ".[dev]"
 ```
 
 **Requirements:** Python ≥ 3.8, numpy, pandas, scikit-learn, matplotlib, umap-learn.
@@ -55,7 +53,7 @@ pip install -r requirements.txt
 
 ```python
 import numpy as np
-from pyRA import RashomonAlignment
+from ralign import RashomonAlignment
 
 # Predictions from two models on a held-out test set
 pred_unpruned = np.array([0, 1, 1, 0, 1, 1, 0])

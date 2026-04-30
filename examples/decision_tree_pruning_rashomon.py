@@ -17,7 +17,7 @@ from sklearn.tree import DecisionTreeClassifier
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from pyRA.metrics import RashomonAlignment  # noqa: E402
+from ralign.metrics import RashomonAlignment  # noqa: E402
 
 RANDOM_STATE = 42
 N_SPLITS = 5
