@@ -3,7 +3,7 @@ pyRA — Rashomon Alignment
 
 **pyRA** is a Python package implementing *Rashomon Alignment* (RA), a framework for measuring functional similarity between classification models by comparing their decision boundaries rather than their predictive accuracy.
 
-> Soares, C., van der Putten, P., Pfahringer, B., & Santos, M. (2025).
+> Soares, C., van der Putten, P., Pfahringer, B., & Santos, M. (2026).
 > **Rashomon Alignment**.
 > *Faculty of Engineering, University of Porto / LIACC / Fraunhofer AICOS / BrightFactory / Leiden University / University of Waikato.*
 
