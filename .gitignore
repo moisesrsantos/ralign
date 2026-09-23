@@ -1,0 +1,5 @@
+.claude/
+.github/
+examples/
+dist/
+ralign.egg-info/

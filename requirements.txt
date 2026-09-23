@@ -3,3 +3,4 @@ pandas>=1.5
 scikit-learn>=1.2
 matplotlib>=3.5
 umap-learn>=0.5.4
+scipy>=1.9

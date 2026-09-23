@@ -29,14 +29,14 @@ class FakeProba:
         return proba
 
 
-def test_generate_uniform_samples_basic():
+def test_sobol_samples_basic():
     df = pd.DataFrame({
         "num": [0.0, 1.0, 2.0],
         "bin": [0, 1, 0],
         "cat": ["a", "b", "a"],
     })
-    gen = RashomonAlignment.generate_uniform_samples(df, n_samples=50, random_state=0)
-    assert gen.shape == (50, 3)
+    gen = RashomonAlignment.sobol_samples(df, m=64, seed=0)
+    assert gen.shape == (64, 3)
     assert gen["num"].min() >= 0.0 - 1e-8
     assert gen["num"].max() <= 2.0 + 1e-8
     assert set(gen["bin"].unique()).issubset({0, 1})
@@ -60,7 +60,7 @@ def test_compare_models_alignment():
     # model 0 always predicts 0, model 1 always predicts 1
     m0 = FakePredict(0)
     m1 = FakePredict(1)
-    res = RashomonAlignment.geometric(models=[m0, m1], df=df, feature_cols=["a"], n_samples=30, random_state=1)
+    res = RashomonAlignment.geometric(models=[m0, m1], df=df, feature_cols=["a"], n_samples=30, seed=1)
     # since predictions differ, jaccard alignment should be 0.0
     assert res["alignment"] == 0.0
 

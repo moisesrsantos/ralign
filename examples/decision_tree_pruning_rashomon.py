@@ -168,7 +168,7 @@ def evaluate_dataset(dataset_dir: Path):
         gra_vals.append(RashomonAlignment.geometric(
             [unpruned, pruned], X_tr,
             feature_cols=X_tr.columns, n_samples=1000,
-            random_state=RANDOM_STATE,
+            seed=RANDOM_STATE,
         )["alignment"])
 
     return {

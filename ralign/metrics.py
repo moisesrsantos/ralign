@@ -1,7 +1,9 @@
 """Metrics for evaluating alignment between models in the Rashomon set."""
-from typing import Sequence, Optional, Dict, Any
+import warnings
+from typing import Sequence, Optional, Dict, Any, Tuple
 import numpy as np
 import pandas as pd
+from scipy.stats import qmc
 from sklearn.metrics import cohen_kappa_score
 import matplotlib.pyplot as plt
 
@@ -26,57 +28,6 @@ class RashomonAlignment:
         return cls.jaccard(np.asarray(a), np.asarray(b))
 
     @staticmethod
-    def generate_uniform_samples(
-        df: pd.DataFrame,
-        n_samples: int = 10000,
-        numeric_cols: Optional[Sequence[str]] = None,
-        binary_cols: Optional[Sequence[str]] = None,
-        random_state: Optional[int] = None,
-    ) -> pd.DataFrame:
-        """Generate synthetic samples: numeric uniformly in observed range, binary sampled from observed uniques.
-
-        Returns a DataFrame with same columns as requested.
-        """
-
-        rng = np.random.default_rng(random_state)
-        X = df.copy()
-        if numeric_cols is None:
-            numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
-        if binary_cols is None:
-            binary_cols = [c for c in X.columns if X[c].dropna().nunique() == 2]
-
-        # if a numeric column is binary (e.g., 0/1), treat it as binary
-        numeric_cols = [c for c in numeric_cols if c not in set(binary_cols)]
-
-        columns = {}
-        for c in X.columns:
-            if c in numeric_cols:
-                col = X[c].dropna()
-                if col.empty:
-                    columns[c] = np.full(n_samples, np.nan)
-                else:
-                    lo, hi = float(col.min()), float(col.max())
-                    if lo == hi:
-                        columns[c] = np.full(n_samples, lo)
-                    else:
-                        columns[c] = rng.uniform(lo, hi, size=n_samples)
-            elif c in binary_cols:
-                vals = X[c].dropna().unique()
-                if len(vals) == 0:
-                    columns[c] = np.full(n_samples, np.nan)
-                else:
-                    columns[c] = rng.choice(vals, size=n_samples)
-            else:
-                vals = X[c].dropna().unique()
-                if len(vals) == 0:
-                    columns[c] = np.full(n_samples, np.nan)
-                else:
-                    columns[c] = rng.choice(vals, size=n_samples)
-
-        out = pd.DataFrame(columns)
-        return out
-
-    @staticmethod
     def apply_models_to_generated(models: Sequence[Any], X: pd.DataFrame) -> Dict[int, np.ndarray]:
         """Apply models to samples. Try `predict`, then `predict_proba` (take argmax).
 
@@ -92,6 +43,101 @@ class RashomonAlignment:
             results[i] = np.asarray(preds)
         return results
 
+    @staticmethod
+    def wilson_ci(successes: int, n: int, z: float = 1.959963984540054) -> Tuple[float, float]:
+        """Wilson score confidence interval for a binomial proportion."""
+        if n == 0:
+            return 0.0, 1.0
+        phat = successes / n
+        denom = 1.0 + z ** 2 / n
+        center = phat + z ** 2 / (2 * n)
+        margin = z * np.sqrt(phat * (1 - phat) / n + z ** 2 / (4 * n ** 2))
+        lo = (center - margin) / denom
+        hi = (center + margin) / denom
+        return max(0.0, lo), min(1.0, hi)
+
+    @staticmethod
+    def sobol_samples(
+        df: pd.DataFrame,
+        m: int,
+        numeric_cols: Optional[Sequence[str]] = None,
+        categorical_cols: Optional[Sequence[str]] = None,
+        seed: Optional[int] = None,
+    ) -> pd.DataFrame:
+        """Generate m low-discrepancy Sobol samples over the observed feature space.
+
+        Numeric columns are mapped to the observed [min, max] range; categorical
+        (including binary) columns are mapped to the observed unique categories.
+        The base [0, 1) coordinates are drawn from a scrambled Sobol sequence for
+        lower-variance coverage of the instance space than i.i.d. uniform draws.
+        """
+        X = df.copy()
+        if numeric_cols is None:
+            numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+        if categorical_cols is None:
+            categorical_cols = [c for c in X.columns if X[c].dropna().nunique() == 2]
+        numeric_cols = [c for c in numeric_cols if c not in set(categorical_cols)]
+        categorical_cols = [c for c in X.columns if c in set(categorical_cols)] or [
+            c for c in X.columns if c not in set(numeric_cols)
+        ]
+
+        d = len(numeric_cols) + len(categorical_cols)
+        sampler = qmc.Sobol(d=max(d, 1), scramble=True, seed=seed)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            u = sampler.random(m)
+
+        columns = {}
+        for j, c in enumerate(numeric_cols):
+            col = X[c].dropna()
+            if col.empty:
+                columns[c] = np.full(m, np.nan)
+                continue
+            lo, hi = float(col.min()), float(col.max())
+            if hi <= lo:
+                hi = lo + 1e-9
+            columns[c] = lo + u[:, j] * (hi - lo)
+
+        offset = len(numeric_cols)
+        for gi, c in enumerate(categorical_cols):
+            vals = X[c].dropna().unique()
+            if len(vals) == 0:
+                columns[c] = np.full(m, np.nan)
+                continue
+            k = len(vals)
+            col_u = u[:, offset + gi]
+            cat_idx = np.minimum((col_u * k).astype(int), k - 1)
+            columns[c] = np.asarray(vals)[cat_idx]
+
+        return pd.DataFrame(columns)[list(df.columns)]
+
+    @classmethod
+    def _qmc_agreement(
+        cls,
+        models: Sequence[Any],
+        df: pd.DataFrame,
+        feature_cols: Sequence[str],
+        m: int,
+        numeric_cols: Optional[Sequence[str]] = None,
+        categorical_cols: Optional[Sequence[str]] = None,
+        seed: Optional[int] = None,
+    ) -> Tuple[pd.DataFrame, Dict[int, np.ndarray], float, float, float]:
+        """Draw m Sobol samples, apply model 0 and model 1, and score their agreement.
+
+        Shared by `geometric` and `qmc_gra` so both compute gRA the same way -
+        via Sobol QMC sampling plus a Wilson confidence interval on the
+        agreement rate - at whatever sample size the caller needs.
+
+        Returns (generated, predictions, agreement_rate, ci_low, ci_high).
+        """
+        gen = cls.sobol_samples(df[list(feature_cols)], m, numeric_cols, categorical_cols, seed=seed)
+        preds = cls.apply_models_to_generated(models, gen)
+        agree = preds[0] == preds[1]
+        successes = int(np.sum(agree))
+        p = successes / m
+        ci_low, ci_high = cls.wilson_ci(successes, m)
+        return gen, preds, p, ci_low, ci_high
+
     @classmethod
     def geometric(
         cls,
@@ -99,20 +145,70 @@ class RashomonAlignment:
         df: pd.DataFrame,
         feature_cols: Sequence[str],
         n_samples: int = 1000,
-        binary_cols: Optional[Sequence[str]] = None,
         numeric_cols: Optional[Sequence[str]] = None,
-        random_state: Optional[int] = None,
+        categorical_cols: Optional[Sequence[str]] = None,
+        seed: Optional[int] = None,
         alignment_method: str = "jaccard",
     ) -> Dict[str, Any]:
-        """Generate samples, apply models, and compute alignment between model 0 and model 1.
+        """Geometric Rashomon Alignment (gRA): agreement between model 0 and model 1
+        over synthetic Sobol samples spanning the observed instance space.
 
-        Returns a dict with keys: 'generated', 'predictions', 'alignment', 'alignment_method'.
+        Returns a dict with keys: 'generated', 'predictions', 'alignment',
+        'alignment_method', 'ci_low', 'ci_high' (Wilson CI on the agreement rate).
         """
-        gen = cls.generate_uniform_samples(df[feature_cols], n_samples, numeric_cols, binary_cols, random_state)
-        preds = cls.apply_models_to_generated(models, gen)
-        a, b = preds[0], preds[1]
-        alignment = cls.distributional(a, b, method=alignment_method)
-        return {"generated": gen, "predictions": preds, "alignment": alignment, "alignment_method": alignment_method}
+        gen, preds, p, ci_low, ci_high = cls._qmc_agreement(
+            models, df, feature_cols, n_samples, numeric_cols, categorical_cols, seed
+        )
+        alignment = p if alignment_method == "jaccard" else cls.distributional(
+            preds[0], preds[1], method=alignment_method
+        )
+        return {
+            "generated": gen,
+            "predictions": preds,
+            "alignment": alignment,
+            "alignment_method": alignment_method,
+            "ci_low": ci_low,
+            "ci_high": ci_high,
+        }
+
+    @classmethod
+    def qmc_gra(
+        cls,
+        models: Sequence[Any],
+        df: pd.DataFrame,
+        feature_cols: Sequence[str],
+        numeric_cols: Optional[Sequence[str]] = None,
+        categorical_cols: Optional[Sequence[str]] = None,
+        m_low: int = 1000,
+        m_high: int = 8000,
+        seed: Optional[int] = None,
+        flag_threshold: float = 0.03,
+    ) -> Dict[str, Any]:
+        """Estimate gRA at two sample sizes to check convergence of the Sobol QMC estimate.
+
+        Model-agnostic: model 0 and model 1 are compared only through their
+        `.predict` outputs on synthetic Sobol samples (see `geometric` /
+        `_qmc_agreement`), with no inspection of model internals. `flag_diff`
+        signals whether the `m_low` and `m_high` estimates disagree by more
+        than `flag_threshold`, i.e. the estimate has not yet converged.
+        """
+        _, _, p_low, _, _ = cls._qmc_agreement(models, df, feature_cols, m_low, numeric_cols, categorical_cols, seed)
+        seed_high = None if seed is None else seed + 1
+        _, _, p_high, ci_low, ci_high = cls._qmc_agreement(
+            models, df, feature_cols, m_high, numeric_cols, categorical_cols, seed_high
+        )
+
+        return {
+            "gra": p_high,
+            "ci_low": ci_low,
+            "ci_high": ci_high,
+            "method": "qmc",
+            "m_low": m_low,
+            "m_high": m_high,
+            "gra_m_low": p_low,
+            "gra_m_high": p_high,
+            "flag_diff": abs(p_low - p_high) > flag_threshold,
+        }
 
     @staticmethod
     def plot_models(

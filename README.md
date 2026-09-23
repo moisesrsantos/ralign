@@ -79,7 +79,7 @@ result = RashomonAlignment.geometric(
     df=X,
     feature_cols=list(X.columns),
     n_samples=1000,
-    random_state=42,
+    seed=42,
 )
 print(f"gRA: {result['alignment']:.3f}")
 ```
@@ -158,25 +158,29 @@ Returns `float` in [0, 1] (`"jaccard"`) or [−1, 1] (`"cohen_kappa"`).
 
 ---
 
-### `RashomonAlignment.generate_uniform_samples(df, n_samples, numeric_cols, binary_cols, random_state)`
+### `RashomonAlignment.sobol_samples(df, m, numeric_cols, categorical_cols, seed)`
 
-Generate a synthetic dataset by sampling each column uniformly within its observed range.
+Generate a synthetic dataset by drawing a scrambled Sobol (quasi-Monte Carlo) sequence and mapping
+it onto each column's observed range (numeric) or observed unique values (categorical/binary).
+Lower-variance coverage of the instance space than i.i.d. uniform sampling.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `df` | `pd.DataFrame` | — | Reference data defining feature ranges |
-| `n_samples` | `int` | `10000` | Number of synthetic instances |
-| `numeric_cols` | list\|None | auto-detected | Columns sampled from U(min, max) |
-| `binary_cols` | list\|None | auto-detected | Columns sampled from observed unique values |
-| `random_state` | int\|None | `None` | RNG seed |
+| `m` | `int` | — | Number of synthetic instances |
+| `numeric_cols` | list\|None | auto-detected | Columns sampled from U(min, max) via Sobol |
+| `categorical_cols` | list\|None | auto-detected (nunique == 2) | Columns sampled from observed unique values via Sobol |
+| `seed` | int\|None | `None` | RNG seed |
 
 Returns `pd.DataFrame` with the same columns as `df`.
 
 ---
 
-### `RashomonAlignment.geometric(models, df, feature_cols, n_samples, binary_cols, numeric_cols, random_state, alignment_method)`
+### `RashomonAlignment.geometric(models, df, feature_cols, n_samples, numeric_cols, categorical_cols, seed, alignment_method)`
 
-Full gRA pipeline: generate synthetic data → apply models → compute agreement.
+Full gRA pipeline: draw Sobol samples over the instance space → apply models → compute agreement,
+with a Wilson confidence interval on the agreement rate. For a convergence check between two sample
+sizes, see `qmc_gra` below (both share the same underlying Sobol QMC estimator).
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -184,9 +188,18 @@ Full gRA pipeline: generate synthetic data → apply models → compute agreemen
 | `df` | `pd.DataFrame` | — | Training data (defines bounding box) |
 | `feature_cols` | list | — | Feature columns to use |
 | `n_samples` | `int` | `1000` | Synthetic instances |
-| `alignment_method` | `str` | `"jaccard"` | Passed to `distributional` |
+| `alignment_method` | `str` | `"jaccard"` | Passed to `distributional`; `"jaccard"` reuses the agreement rate directly |
 
-Returns `dict` with keys `generated`, `predictions`, `alignment`, `alignment_method`.
+Returns `dict` with keys `generated`, `predictions`, `alignment`, `alignment_method`, `ci_low`, `ci_high`.
+
+---
+
+### `RashomonAlignment.qmc_gra(models, df, feature_cols, numeric_cols, categorical_cols, m_low, m_high, seed, flag_threshold)`
+
+Estimates gRA at two sample sizes (`m_low=1000`, `m_high=8000` by default) using the same Sobol QMC
+estimator as `geometric`, to flag whether the estimate has converged (`flag_diff`).
+
+Returns `dict` with keys `gra`, `ci_low`, `ci_high`, `method`, `m_low`, `m_high`, `gra_m_low`, `gra_m_high`, `flag_diff`.
 
 ---
 
