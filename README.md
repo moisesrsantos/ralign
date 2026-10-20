@@ -45,7 +45,21 @@ cd ralign
 pip install -e ".[dev]"
 ```
 
-**Requirements:** Python ≥ 3.8, numpy, pandas, scikit-learn, matplotlib, umap-learn.
+**Requirements:** Python ≥ 3.8, numpy, pandas, scipy, scikit-learn, matplotlib, umap-learn.
+
+---
+
+## Repository layout
+
+This repository contains the `ralign` library and, separately, the paper's experiments:
+
+| Path | Contents |
+|------|----------|
+| `ralign/` | The installable library (`pip install ralign`). All gRA/dRA estimation logic (Sobol QMC sampling, Wilson CIs, agreement metrics) lives here and nowhere else. |
+| `examples/` | Paper-specific experiment code: dataset loading, model pairs, shift-robustness protocol, plotting, and the manuscript itself (`examples/paper/`). These scripts are consumers of `ralign` - they import `RashomonAlignment` and call `geometric`/`qmc_gra` rather than reimplementing estimation logic. |
+| `tests/` | Unit tests for `ralign` only. |
+
+If you are only interested in using Rashomon Alignment in your own project, you need `ralign/` (via `pip install ralign`); `examples/` is reproducibility material for the paper.
 
 ---
 

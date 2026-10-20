@@ -1,5 +1,9 @@
 .claude/
-.github/
-examples/
 dist/
 ralign.egg-info/
+
+# build / cache artifacts (library and paper experiments alike)
+**/__pycache__/
+*.py[cod]
+examples/datasets/.openml_cache/
+examples/figures/

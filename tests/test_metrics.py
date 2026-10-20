@@ -43,6 +43,28 @@ def test_sobol_samples_basic():
     assert set(gen["cat"].unique()).issubset({"a", "b"})
 
 
+def test_sobol_samples_multiclass_categorical():
+    # a non-binary categorical column must still be covered when numeric_cols
+    # and categorical_cols are both left to auto-detection (regression test:
+    # such columns used to be silently dropped, causing a KeyError).
+    df = pd.DataFrame({
+        "num": [0.0, 1.0, 2.0, 3.0],
+        "cat": ["a", "b", "c", "a"],
+    })
+    gen = RashomonAlignment.sobol_samples(df, m=32, seed=0)
+    assert gen.shape == (32, 2)
+    assert set(gen["cat"].unique()).issubset({"a", "b", "c"})
+
+
+def test_sobol_samples_all_numeric_with_explicit_empty_categorical():
+    # explicit categorical_cols=[] (not None) must be respected, e.g. for a
+    # PCA-component feature space with no categorical columns at all.
+    df = pd.DataFrame({"pc0": [0.0, 1.0], "pc1": [-1.0, 1.0]})
+    gen = RashomonAlignment.sobol_samples(
+        df, m=16, numeric_cols=["pc0", "pc1"], categorical_cols=[], seed=0)
+    assert gen.shape == (16, 2)
+
+
 def test_apply_models_to_generated_predict_and_proba():
     df = pd.DataFrame({"x": [0, 1, 2]})
     models = [FakePredict(1), FakeProba([0, 1, 2])]

@@ -1,0 +1,459 @@
+\documentclass[runningheads]{llncs}
+
+\usepackage[T1]{fontenc}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{comment}
+\usepackage{epstopdf}
+\usepackage{algorithmic}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{booktabs}
+
+
+\ifpdf
+  \DeclareGraphicsExtensions{.eps,.pdf,.png,.jpg}
+\else
+  \DeclareGraphicsExtensions{.eps}
+\fi
+
+\usepackage{amsopn}
+\DeclareMathOperator{\diag}{diag}
+
+% Theorem-like environments for LNCS
+\newtheorem{hypothesis}{Hypothesis}
+% \newtheorem{claim}{Claim}
+
+\begin{document}
+
+\title{Rashomon Alignment}
+
+\titlerunning{Rashomon Alignment}
+
+\author{Moisés Santos\inst{1,2} \and Peter van der Putten\inst{5} \and Bernhard Pfahringer\inst{6} \and Carlos Soares\inst{1,2,3,4}}
+\authorrunning{Santos et al.}
+
+\institute{Faculty of Engineering, University of Porto, Portugal \and
+Artificial Intelligence and Computer Science Lab (LIACC), Portugal \and
+Fraunhofer AICOS Portugal, Portugal \and
+BrightFactory, Portugal \and
+LIACS, Leiden University, Leiden, The Netherlands \and
+School of Computing and Mathematical Sciences, University of Waikato, Hamilton, New Zealand \\
+\email{mrsantos@fe.up.pt, p.w.h.van.der.putten@liacs.leidenuniv.nl, bernhard@cs.waikato.ac.nz, csoares@fe.up.pt}
+}
+
+
+\maketitle
+
+\begin{abstract}
+We propose Rashomon Alignment (RA), a new measure to assess functional similarity between two models. Existing functional similarity measures are \emph{distributional}, quantifying differences between outputs of models applied to real-world data.
+However, these measures can be regarded as ecologically valid only for regions in the input space represented by the available data.
+We introduce a \emph{geometrical} perspective on functional model similarity, which estimates it across the entire data space, offering a comprehensive view of decision boundary alignment independent of any specific data distribution. We also propose geometric Rashomon Alignment (gRA) as a measure of geometrical similarity, estimated with a single, model-agnostic quasi-Monte Carlo procedure that applies identically to any classifier. We perform an experimental analysis on more than 90 datasets, examining critical cases where model alignment diverges from predictive accuracy, and show that the gap between the two measures is empirically bounded by the total-variation distance between the observed and reference distributions, and that this behaviour generalizes across three qualitatively different pairs of algorithms. A closing case study on a single, substantially higher-dimensional dataset, in which one algorithm pair is replaced by a tabular foundation model, confirms that the same bound continues to hold outside the tabular UCI setting, and shows two models agreeing on the large majority of observed data while their decision boundaries coincide on only a small fraction of the broader instance space.
+Our results show that geometrical and distributional alignment provide different and complementary perspectives on the similarity between models and algorithms. RA can be used for multiple purposes, including model selection, ensemble construction, and enhanced interpretability of machine learning models and algorithms.
+\end{abstract}
+
+\keywords{Model similarity \and Decision boundary alignment \and Rashomon sets \and Functional similarity \and Machine learning}
+
+
+%--------------------------------------------------------------------
+\section{Introduction}
+%--------------------------------------------------------------------
+
+Functional measures assess the similarity between models by comparing their outputs and have been used for multiple purposes, including a better understanding of models and algorithms, improve learning and select models in ensemble learning~\cite{Klabunde2025}. However, current usage of these measures consists of applying them to the outputs of the models being evaluated on available data~\cite{Lee2011,Klabunde2025}. This means that the representativeness of the available data affects the quality of the estimates of similarity obtained this way. Poorly-representative samples lead to poor estimations of similarity between models. Additionally, even if the estimates are accurate with the current data, they will become outdated in the case of concept change.
+
+
+To address this question, we propose \emph{Rashomon%
+\footnote{While Rashomon Sets originally describe sets of models with high predictive performance~\cite{Breiman2001,Fisher2019}, the idea of similarity between models is as interesting as the focus on high-accuracy models. Therefore, we believe it adequate to use this as the name of a measure that can be used to identify models that define similar decision boundaries.} Alignment}%
+\footnote{We prefer the term \emph{alignment} to \emph{similarity} as two models can be very different (i.e.\ the descriptions of the same concept they represent are very different) but define similar decision boundaries in the instance space}
+(RA).
+Since it is neither possible to assess the representativeness of the available data sample regarding the corresponding true distribution, nor to sample from that distribution, as it is unknown, we propose the use of a representative sample of the data space (i.e., the space defined by the domains of the variables). We refer to this as \emph{Geometrical Rashomon Alignment} (gRA), as opposed to \emph{Distributional Rashomon Alignment} (dRA), which would be obtained using a sample that is representative of the distribution of the data.
+
+This distinction between measuring agreement on observed data and across the full instance space is not unique to the setting we study here; it echoes an open question in a closely related but distinct line of work on the \emph{Rashomon effect}~\cite{Breiman2001}: the observation that many near-optimal models can coexist for a given problem, so that no single model captures the full picture~\cite{Fisher2019,Rudin2024,Biecek2024}. Within this line, \emph{predictive multiplicity}~\cite{Marx2020,Renard2024} quantifies how much predictions vary across the near-optimal set, typically induced by hyperparameter choices or random seeds, rather than between two arbitrary, already-trained models. The \emph{discrepancy} measure of~\cite{Marx2020} is structurally a special case of dRA restricted to comparisons against a fixed reference configuration, and, like related measures such as Rashomon Capacity~\cite{HsuCalmon2022}, \emph{disagreement}~\cite{Kulynych2023}, and probabilistic extensions of discrepancy~\cite{WatsonDaniels2023}, it is estimated exclusively from observed data. A recent large-scale study of hyperparameter-induced predictive multiplicity~\cite{Cavus2025} illustrates the practical stakes well, reporting substantial prediction discrepancy from tuning across 21 benchmark datasets; however, because discrepancy is computed only on the observed test sample, it cannot on its own distinguish a genuine, global change in the decision boundary from an artifact of the particular region of the instance space the test sample happens to cover. None of these measures has a geometric, distribution-independent counterpart, which is precisely the gap gRA is designed to fill.
+
+Work on exploring Rashomon sets computationally is also relevant to the present approach. \cite{Xin2022} enumerate the Rashomon set of sparse decision trees exactly via its leaf structure, an approach that, unlike the sampling-based computation of gRA we use here (Sect.~\ref{sec:align}), requires a model-specific, closed-form partition of the instance space and therefore does not extend to arbitrary classifiers; \cite{Hsu2024dropout} explore large Rashomon sets efficiently via dropout-based sampling for models without such closed-form partitions, in a spirit closer to our own model-agnostic, sampling-based estimator, and \cite{Hsu2024rashomongb} target gradient boosting specifically, the model family found to exhibit the highest discrepancy in~\cite{Cavus2025}. Closest in spirit to the geometric perspective taken here, concurrent work~\cite{Hsu2025double} shows that Rashomon sets, as a whole, tend to be stable under small covariate shifts, a set-level analogue of the invariance property we establish for gRA at the pairwise, decision-boundary level (Sect.~\ref{sec:align}).
+
+We illustrate the proposed measures on the comparison between pruned and unpruned decision trees~\cite{Aggarwal2015}, and further test their generality on a linear-versus-RBF SVM pair and a logistic-regression-versus-MLP pair. The results are obtained on 92 UCI datasets~\cite{UCI2025}.
+We show that the geometric and distributional alignment provide different perspectives on the similarity between models.
+We also show that, as expected, the method is able to identify cases when the two models are in fact producing quite different classifications but have similar accuracy, which demonstrates that just focusing on predictive performance alone can be deceiving. We further show that the gap between the two measures is empirically bounded by the total-variation distance between the observed and reference distributions, and quantify the practical risk of relying on dRA alone under covariate shift. Finally, a closing case study on MNIST, in which one algorithm pair is replaced by a tabular foundation model, shows that both the bound and the practical risk it explains persist on a single, substantially higher-dimensional dataset outside the UCI collection.
+
+The contributions in this paper are:
+\begin{itemize}
+\item a new method to assess the similarity between classification models and algorithms;
+\item a single, model-agnostic quasi-Monte Carlo estimator of gRA with confidence intervals, applied identically to any classifier (tree-based or otherwise) and respecting the validity of categorical (one-hot) domains, rather than a naive continuous relaxation of the one-hot encoding;
+\item an extensive empirical study of the new method, including a controlled covariate-shift experiment that instantiates and validates a testable, total-variation corollary of the bound relating dRA and gRA, demonstrates generality across three qualitatively different algorithm pairs on 92 UCI datasets, and extends to a closing case study on a single, higher-dimensional dataset with a tabular foundation model.
+\end{itemize}
+
+The remainder of this paper is organized as follows. In Sect.~\ref{sec:align} we discuss alignment of algorithms in terms of produced classifications in more detail, and relate it to predictive performance, as well as performance on synthetic versus real world data. We then discuss our experimental setup and results in respectively Sects.~\ref{sec:setup} and \ref{sec:results}, and the conclusions in Sect.~\ref{sec:conclusion}.
+
+
+%--------------------------------------------------------------------
+\section{Rashomon Alignment}
+\label{sec:align}
+%--------------------------------------------------------------------
+
+Empirical comparisons between learning algorithms typically rely on predictive performance, but accuracy alone does not reveal whether two models err in the same regions of the instance space or define structurally similar decision boundaries~\cite{Fernandez-Delgado2014a,d2022}. \emph{Functional similarity measures}~\cite{Klabunde2025} address this gap by comparing model outputs rather than internal representations. We build on the prediction-based variant, which we now formalize and extend with a geometric perspective.
+
+\subsection{Prediction-Based Agreement}
+\label{sec:agreement}
+
+Let $\mathcal{C}$ be a finite set of class labels and $\mathcal{F} = \mathcal{F}_1 \times \cdots \times \mathcal{F}_p$ the instance space, where each $\mathcal{F}_k$ is the domain of attribute $k$. Let $M_A, M_B : \mathcal{F} \to \mathcal{C}$ be two models induced by algorithms $A$ and $B$ on training data drawn from a distribution $P$ over $\mathcal{F} \times \mathcal{C}$ with marginal $P(X)$ on $\mathcal{F}$.
+
+For any finite set of evaluation instances $X = \{x_1, \ldots, x_n\} \subseteq \mathcal{F}$, the empirical \emph{agreement} between $M_A$ and $M_B$ on $X$ is:%
+\footnote{Equivalent to the complement of the \emph{disagreement} distance~\cite{Lee2011}, and related to the Jaccard coefficient~\cite{jaccard1901}. Soft variants based on Cohen's Kappa~\cite{cohen1960} or predicted probabilities are equally applicable.}
+\begin{equation}
+  \label{eq:agreement}
+  \theta_X(M_A, M_B) = \frac{1}{n} \sum_{i=1}^{n} \mathbf{1}\bigl[M_A(x_i) = M_B(x_i)\bigr] \in [0, 1].
+\end{equation}
+A value of $1$ indicates identical predictions on $X$, $0$ indicates full disagreement. The empirical agreement is an estimator of the population-level agreement $\theta^Q(M_A, M_B) = \mathbb{E}_{x \sim Q}[\mathbf{1}[M_A(x) = M_B(x)]]$ with respect to some reference distribution $Q$ over $\mathcal{F}$. The choice of $Q$ determines what notion of similarity is being measured, and it is precisely this choice that distinguishes the two variants of RA introduced below. We call both variants \emph{Rashomon Alignment} since they identify pairs of models with equivalent predictive behavior~\cite{d2022,Breiman2001}.
+
+\subsection{Distributional Rashomon Alignment}
+\label{sec:dra}
+
+dRA takes the reference distribution $Q$ to be the data-generating distribution $P(X)$. Formally:
+\begin{equation}
+  \label{eq:dra-pop}
+  \mathrm{dRA}^*(M_A, M_B)
+  = \mathbb{E}_{x \sim P(X)}\bigl[\mathbf{1}[M_A(x) = M_B(x)]\bigr]
+  = \int_{\mathcal{F}} \mathbf{1}[M_A(x) = M_B(x)]\, p(x)\, dx,
+\end{equation}
+where $p(x)$ denotes the density of $P(X)$. Given a sample $X_\text{obs} = \{x_1, \ldots, x_n\}$ drawn i.i.d.\ from $P(X)$ (in practice, a hold-out test set), the dRA is estimated by:
+\begin{equation}
+  \label{eq:dra}
+  \mathrm{dRA}(M_A, M_B) = \theta_{X_\text{obs}}(M_A, M_B),
+\end{equation}
+which is an unbiased and consistent estimator of $\mathrm{dRA}^*$ by the law of large numbers, with $\mathrm{dRA} \xrightarrow{a.s.} \mathrm{dRA}^*$ as $n \to \infty$.
+
+The dRA reflects agreement in the regions of $\mathcal{F}$ where real data lies. However, it inherits the representativeness of $X_\text{obs}$ and is sensitive to changes in $P(X)$: under covariate shift, the same pair of models may yield arbitrarily different dRA values without their decision boundaries having changed.
+
+\subsection{Geometric Rashomon Alignment}
+\label{sec:gra}
+
+gRA takes the reference distribution $Q$ to be the uniform distribution $U(\mathcal{F})$ over the instance space, so that all regions of $\mathcal{F}$ contribute equally regardless of where data is observed:
+\begin{equation}
+  \label{eq:gra-pop}
+  \mathrm{gRA}^*(M_A, M_B)
+  = \mathbb{E}_{x \sim U(\mathcal{F})}\bigl[\mathbf{1}[M_A(x) = M_B(x)]\bigr]
+  = \frac{1}{|\mathcal{F}|} \int_{\mathcal{F}} \mathbf{1}[M_A(x) = M_B(x)]\, dx,
+\end{equation}
+where $|\mathcal{F}| = \int_\mathcal{F} dx$ is the volume of the instance space (assumed bounded; for unbounded domains, $\mathcal{F}$ is restricted to the empirical range observed in training data). Geometrically, $\mathrm{gRA}^*$ is the fraction of the instance space on which the two decision functions coincide.
+
+Given a synthetic sample $X_\text{syn} = \{x_1^\star, \ldots, x_m^\star\}$ drawn i.i.d.\ from $U(\mathcal{F})$, the gRA is estimated by:
+\begin{equation}
+  \label{eq:gra}
+  \mathrm{gRA}(M_A, M_B) = \theta_{X_\text{syn}}(M_A, M_B),
+\end{equation}
+which is again unbiased and consistent: $\mathrm{gRA} \xrightarrow{a.s.} \mathrm{gRA}^*$ as $m \to \infty$. Crucially, $X_\text{syn}$ is generated independently of any training or test data, so $\mathrm{gRA}$ is invariant to changes in $P(X)$ as long as the underlying decision functions $M_A$ and $M_B$ remain fixed. Sect.~\ref{sec:setup} details how $X_\text{syn}$ is generated so that it respects mixed numerical/categorical domains exactly, rather than through a naive continuous relaxation of the one-hot encoding, using a single sampling procedure that treats $M_A$ and $M_B$ as black boxes and therefore applies uniformly to any classifier, tree-based or otherwise.
+
+\subsection{Relation Between dRA and gRA}
+\label{sec:variants}
+
+The two variants are related through a change of measure. Since $U(\mathcal{F})$ has constant density $u(x) = 1/|\mathcal{F}|$ on $\mathcal{F}$, the integrand of Eq.~\eqref{eq:dra-pop} can be rewritten as an expectation under $U(\mathcal{F})$ by multiplying and dividing by $u(x)$, i.e.\ by the importance ratio $w(x) = p(x)/u(x) = |\mathcal{F}|\,p(x)$:
+\begin{equation}
+  \label{eq:relation}
+  \mathrm{dRA}^*(M_A, M_B)
+  = \mathbb{E}_{x \sim U(\mathcal{F})}\Bigl[\, w(x)\, \mathbf{1}[M_A(x) = M_B(x)] \,\Bigr]
+  = \int_{\mathcal{F}} \mathbf{1}[M_A(x) = M_B(x)]\, p(x)\, dx,
+\end{equation}
+where the last equality follows because $w(x)\, u(x) = p(x)$, recovering Eq.~\eqref{eq:dra-pop} exactly. Consequently $\mathrm{dRA}^* = \mathrm{gRA}^*$ precisely when $w(x) \equiv 1$, i.e.\ when $p(x) = 1/|\mathcal{F}|$ (uniform $P(X)$), and the two diverge otherwise. The magnitude of the gap $|\mathrm{dRA}^* - \mathrm{gRA}^*|$ is bounded above by the total variation distance $\mathrm{TV}(P(X), U(\mathcal{F}))$, since the indicator function is bounded in $[0,1]$. Since $\mathrm{TV}(P(X), U(\mathcal{F}))$ cannot itself be estimated without knowing $p(x)$, Sect.~\ref{sec:e3} instantiates and validates an empirically testable corollary of this bound instead, obtained by comparing the gap under a shifted test distribution to the gap under the original one. This gap is what makes gRA informative beyond dRA: a high dRA with low gRA indicates that two models agree where data lies but disagree elsewhere, a form of agreement that is fragile under distribution shift. Figure~\ref{fig:dif-dist-geom-align} illustrates such a case.
+
+\begin{figure}[tbp]
+\centering
+      \includegraphics[width=0.7\textwidth]{./img/diff_dist_geom_align.png}
+      \caption{Two decision boundaries with high distributional but low geometric alignment.}
+      \label{fig:dif-dist-geom-align}
+\end{figure}
+
+Both measures extend to algorithm-level comparison by averaging over a collection of datasets $\mathcal{X} = \{X_1, \ldots, X_N\}$:
+\[
+  \theta_\mathcal{X}(A, B) = \frac{1}{N} \sum_{i=1}^{N} \theta_{X_i}(M_{A,i}, M_{B,i}),
+\]
+where $M_{A,i}$ and $M_{B,i}$ are the models trained by $A$ and $B$ on dataset $i$.
+
+\subsection{Alignment vs.\ Accuracy}
+\label{sec:disc-alig-vs-acc}
+
+RA complements accuracy rather than replacing it. To make this concrete, we examine the four combinations of alignment (gRA) and accuracy difference between two models. Figure~\ref{fig:cases} illustrates each case on a synthetic 2D dataset, with the agreement map (right column) showing where the two models concur (blue) or disagree (red).
+
+\textit{Case~1: Low gRA, low $\Delta$acc} (Fig.~\ref{fig:cases}, top row). An SVM with RBF kernel and an MLP both achieve accuracy $0.94$, yet agree on only $45\%$ of the instance space. Each model is accurate in different regions, and the test sample happens to lie where the errors balance out. Accuracy alone misses this structural divergence.
+
+\textit{Case~2: High gRA, high $\Delta$acc} (Fig.~\ref{fig:cases}, second row). A logistic regression and a decision tree share nearly identical decision boundaries (gRA $= 0.95$) but differ by $12$ percentage points in accuracy. The disagreement is confined to thin axis-parallel bands induced by the tree, which happen to intersect a disproportionate share of test instances.
+
+\textit{Case~3: Low gRA, high $\Delta$acc} (Fig.~\ref{fig:cases}, third row). A linear SVM (acc $= 0.62$) and an MLP (acc $= 1.00$) on a concentric-rings problem disagree on more than half the space. The MLP captures the non-linear structure that the linear SVM cannot, and gRA simply confirms what accuracy already reveals.
+
+\textit{Case~4: High gRA, low $\Delta$acc} (Fig.~\ref{fig:cases}, bottom row). Two linear SVMs differing only in regularization ($C=1$ vs.\ $C=100$) achieve identical accuracy and gRA $= 1.00$. On a linearly separable problem, regularization strength does not change the learned boundary.
+
+Cases~1 and~2 are where RA contributes the most: it surfaces structural similarities and differences that accuracy alone cannot.
+
+\begin{figure}[tbp]
+  \centering
+  \includegraphics[width=0.85\textwidth]{./img/Case_1.pdf}\\
+  \includegraphics[width=0.85\textwidth]{./img/Case_2.pdf}\\
+  \includegraphics[width=0.85\textwidth]{./img/Case_3.pdf}\\
+  \includegraphics[width=0.85\textwidth]{./img/Case_4.pdf}
+  \caption{Four cases illustrating the relationship between gRA and accuracy difference. Each row shows two models (left, middle) and their agreement map (right): blue indicates agreement, red disagreement. Top to bottom: Case~1 (low gRA, low $\Delta$acc); Case~2 (high gRA, high $\Delta$acc); Case~3 (low gRA, high $\Delta$acc); Case~4 (high gRA, low $\Delta$acc).}
+  \label{fig:cases}
+\end{figure}
+%--------------------------------------------------------------------
+\section{Experimental Setup}
+\label{sec:setup}
+%--------------------------------------------------------------------
+
+To illustrate the usefulness of the proposed methodology, we compared pruned and unpruned decision trees on datasets from the UCI Machine Learning Repository~\cite{UCI2025}, using the Python \texttt{scikit-learn} library~\cite{pedregosa2011scikit} for model induction and the \texttt{ralign} package for the computation of dRA and gRA.%
+\footnote{The \texttt{ralign} package and the experimental code are available at \url{https://github.com/mmrsantos/ralign}.} This scenario was chosen because the two models share the same hypothesis language, so their decision boundaries are directly comparable, while the well-known tendency of unpruned trees to overfit~\cite{Aggarwal2015} ensures that both highly aligned and strongly misaligned pairs can be found across different datasets, making the collection adequate to stress-test the measures. To test whether our conclusions hold beyond a single, axis-aligned hypothesis language, we repeat the entire protocol below for two further pairs (Sect.~\ref{sec:extra-pairs}) and use the resulting three pairs jointly in the shift-robustness experiment of Sect.~\ref{sec:e3}.
+
+\paragraph{Datasets.}
+We used a diverse collection of 92 datasets from the UCI Machine Learning Repository~\cite{UCI2025}, covering multiple application domains (healthcare, finance, biology, image and signal processing), a wide range of sizes (32 to more than 4\,600 instances), dimensionalities (4 to 649 features), feature types (numerical, categorical, and mixed), and class distributions (balanced and imbalanced). The last column of each file was treated as the target; rows with a missing target and classes represented by fewer than three instances were discarded. Numerical features were imputed with the column median and standardised (zero mean, unit variance); categorical features were imputed with the most-frequent value and one-hot encoded.
+
+\paragraph{Decision Tree Models.}
+Both models were induced with \texttt{DecisionTreeClassifier}
+(random state fixed at~42 throughout). The \emph{unpruned} tree was grown with \texttt{min\_samples\_split\,=\,2}, allowing splits down to single-sample nodes and producing the most complex tree the training data supports.
+
+The \emph{pruned} tree used \texttt{min\_samples\_split\,=\,10} combined with cost-complexity pruning. The pruning procedure works as follows. Given a fully grown tree $T$, each internal node $t$ defines a subtree $T_t$ rooted at it. The \emph{effective complexity parameter} of that subtree is
+\begin{equation}
+  \alpha_{\mathrm{eff}}(t)
+    = \frac{R(t) - R(T_t)}{\lvert T_t \rvert - 1},
+  \label{eq:ccp}
+\end{equation}
+where $R(t)$ is the (impurity-weighted) error of node $t$ treated as a leaf, $R(T_t)$ is the sum of leaf errors within $T_t$, and $\lvert T_t \rvert$ is the number of leaves in $T_t$. Intuitively, $\alpha_{\mathrm{eff}}(t)$ measures the per-leaf reduction in training impurity that the subtree $T_t$ provides over simply declaring $t$ a leaf: a small value means the subtree adds many leaves for very little impurity gain and is therefore a good pruning candidate. Starting from the full tree, the node with the smallest $\alpha_{\mathrm{eff}}$ is pruned first, producing a simpler tree whose own $\alpha_{\mathrm{eff}}$ values are recomputed; the process is repeated until only the root remains. The result is a finite, monotonically non-decreasing sequence $0 = \alpha_0 \le \alpha_1 \le \cdots \le \alpha_K$, where each $\alpha_k$ is the threshold at which a new pruning event occurs~\cite{Aggarwal2015}.
+
+The regularisation parameter $\alpha$ was selected per cross-validation fold. An inner 80/20 split of the fold's training data was used to compute this pruning path on the 80\,\% portion. The largest value in the sequence, $\alpha_K$, was then chosen, yielding the most aggressively pruned tree that the data supported, and that tree was re-trained on the full fold training partition with that $\alpha$.%
+\footnote{Selecting $\alpha_K$ rather than validating $\alpha$ against held-out accuracy is a deliberate design choice, intended to maximise the range of alignment and accuracy differences observed across datasets for the purpose of illustrating RA; it is not intended as a recommended pruning strategy in itself.}
+
+\paragraph{Evaluation Protocol.}
+Model performance and alignment were estimated using 5-fold cross-validation (shuffled, random seed 42). For each fold, both trees were trained on the training partition and evaluated on the held-out test partition. Three quantities were recorded per fold: (i)~accuracy difference (pruned minus unpruned), measuring whether pruning hurts or helps predictive performance; (ii)~dRA, computed on the test partition; and (iii)~gRA. Final per-dataset values were obtained by averaging the five fold estimates.
+
+\paragraph{Alignment Estimation.}
+\label{sec:alignment-estimation}
+gRA is estimated with the same procedure for every algorithm pair, tree, SVM, and LogReg/MLP alike, so that the method remains \emph{model-agnostic} and requires no access to model internals beyond a \texttt{predict} call. Synthetic instances are drawn from a Sobol quasi-Monte Carlo sequence~\cite{Joe2008} rather than plain pseudo-random sampling, for better coverage of $\mathcal{F}$ at a given sample size. Numerical dimensions are rescaled to the fold's observed range. Each one-hot categorical group is assigned one additional Sobol dimension, used only to draw a category index uniformly, from which the corresponding one-hot vector is then constructed rather than the reverse, guaranteeing that every synthetic instance lies in a valid region of $\mathcal{F}$, rather than at an invalid, fractional one-hot vector that a naive continuous relaxation of the encoding would produce. Both models are applied to the same synthetic sample and their agreement is computed as in Eq.~\eqref{eq:gra}.
+
+We report gRA at $m = 1{,}000$ and $m = 8{,}000$ points per fold together with a Wilson 95\% confidence interval (treating agreement as a binomial proportion over $m$ trials; mean half-width $0.008$ across all folds), flagging any (dataset, pair) combination for which the two resolutions disagree by more than $0.03$; this occurred for only 4 of the 1\,380 fold/dataset/pair combinations overall (all within the logistic-regression/MLP pair), indicating that $m = 8{,}000$ is already close to convergence.
+
+\paragraph{Additional Algorithm Pairs.}
+\label{sec:extra-pairs}
+To test whether our conclusions generalise beyond a single, axis-aligned hypothesis language, we repeat the protocol above, keeping the same preprocessing, the same 5-fold splits and the same random seed, for two further pairs: a linear (\texttt{SVC(kernel='linear', C=1)}) versus an RBF (\texttt{SVC(kernel='rbf', C=1, gamma='scale')}) support vector classifier, and a logistic regression (\texttt{C=1, max\_iter=1000}) versus a multi-layer perceptron (one hidden layer of 100 ReLU units, early stopping, \texttt{max\_iter=500}). Both pairs share the same training data as the tree pair, so the three pairs are directly comparable fold-by-fold.
+
+\paragraph{Covariate-Shift Induction.}
+\label{sec:shift-protocol}
+For the experiment in Sect.~\ref{sec:e3}, each fold's test partition is subjected to a controlled, post-hoc covariate shift, without retraining. We fit PCA on the (standardised) training partition, project the test partition onto its first principal component, and standardise the resulting scores within the test partition to obtain $z(x)$. For $\beta \in \{0, 0.5, 1, 2, 4\}$, we define tilting weights $w(\beta, x) = \exp(\beta\, z(x))$, normalise them to sum to one, and resample the test partition with replacement (same size as the original) using the normalised weights as sampling probabilities; $\beta = 0$ recovers the original, unweighted test partition. The realised amount of shift is estimated, over the \emph{original} (unweighted) test partition, by
+\begin{equation}
+  \label{eq:tvhat}
+  \widehat{\mathrm{TV}}(\beta) = \frac{1}{2}\, \mathbb{E}_{P}\left[\left\lvert \frac{w(\beta, x)}{\mathbb{E}_P[w(\beta,x)]} - 1 \right\rvert\right],
+\end{equation}
+the standard Monte Carlo estimator of the total variation distance between the original and reweighted test distributions.
+
+\paragraph{A Foundation-Model Case Study on MNIST.}
+\label{sec:mnist-protocol}
+Alongside the 92-dataset sweep, we apply the same covariate-shift protocol to a single, substantially higher-dimensional dataset, MNIST~\cite{lecun1998mnist}, as a closing case study reported in Sect.~\ref{sec:e3}. There, the logistic-regression/MLP pair is replaced with one that includes a tabular \emph{foundation model}, TabPFN~\cite{Hollmann2025Nature}, paired against an MLP, while the tree and SVM pairs are left unchanged. Two adaptations, used only for this case study, make it tractable. TabPFN's public CPU inference path refuses more than a thousand training rows per fold without an explicit override, since attention over a larger context becomes impractically slow without a GPU, so we work with a stratified subsample of MNIST, 120 instances per digit, that keeps every fold's training partition comfortably under this limit. Raw MNIST also has 784 pixel features, and sampling uniformly over a space of that dimensionality would, with overwhelming probability, produce points that resemble no digit at all, while also making repeated QMC sampling and kernel evaluation prohibitively slow; we therefore project onto the leading principal components of each fold's training partition, retaining roughly nine-tenths of pixel variance, before applying any of the three pairs. We checked separately that this costs essentially nothing in TabPFN's own accuracy, which plateaus well before that many components are retained, so the reduction targets a faithful instance space rather than classifier performance. Neither adaptation is used in the 92-dataset sweep or anywhere else in this paper.
+
+\paragraph{Visualisation.}
+Results were analysed through four complementary views: (i)~histograms of the
+distributions of gRA, dRA, and accuracy difference across datasets; (ii)~scatter plots of
+gRA versus accuracy difference and of gRA versus dRA, each annotated with the
+Pearson correlation coefficient; (iii)~a quadrant scatter plot that partitions datasets
+by the medians of gRA and $|\Delta\text{acc}|$, highlighting the four regimes described in Sect.~\ref{sec:disc-alig-vs-acc}; and (iv)~for the shift-robustness experiment, a scatter of the dRA--gRA gap against $\widehat{\mathrm{TV}}(\beta)$ and a bar chart of decision-flip rates, described in Sect.~\ref{sec:e3}.
+
+%--------------------------------------------------------------------
+\section{Results and Discussion}
+\label{sec:results}
+%--------------------------------------------------------------------
+
+We carried out three sets of experiments to illustrate the usefulness of RA:
+
+\begin{description}
+  \item[E1:] comparison between the information obtained with gRA and accuracy difference;
+  \item[E2:] comparison between the information obtained with gRA and dRA;
+  \item[E3:] shift-robustness of dRA relative to gRA, generality across three algorithm pairs on the full UCI collection, and a closing case study on a single, higher-dimensional dataset with a tabular foundation model.
+\end{description}
+
+
+%--------------------------------------------------------------------
+\subsection{E1: gRA and Accuracy Difference}
+%--------------------------------------------------------------------
+
+Figure~\ref{fig:hist_accdiff} shows the distribution of the accuracy difference (pruned minus unpruned) across the 92 datasets. The distribution was strongly left-skewed: the most frequent outcome was a difference close to zero, but a long tail extended to values below $-0.8$, and only a small minority of datasets showed a positive difference. This pattern is consistent with the known tendency of unpruned trees to overfit~\cite{Aggarwal2015}: on datasets with complex or noisy boundaries, an unpruned tree memorises training noise and achieves spuriously high training accuracy, yet generalises poorly to unseen data, so that the pruned model can match or exceed it on the test set. On simpler datasets, however, pruning removes genuinely useful structure, which explains the long negative tail.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\textwidth]{./img/hist_accdiff_corrected.png}
+  \caption{Distribution of accuracy difference (pruned minus unpruned) across 92
+           datasets. The left-skewed shape indicates that pruning most often incurs
+           an accuracy cost, though the magnitude varies widely.}
+  \label{fig:hist_accdiff}
+\end{figure}
+
+Figure~\ref{fig:hist_gRA} shows the distribution of gRA, estimated as described in Sect.~\ref{sec:alignment-estimation}. Unlike accuracy difference, gRA was spread across the full $[0, 1]$ range, with a broad peak between $0.4$ and $0.7$ and no strong concentration at either extreme. This spread indicates that geometric alignment is sensitive to structural properties of each dataset, capturing variation that does not reduce to a single value: even datasets with similarly small accuracy differences exhibited very different gRA values, suggesting that gRA encodes information that accuracy alone does not.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\textwidth]{./img/hist_gRA_corrected.png}
+  \caption{Distribution of gRA across 92 datasets. The spread across the full range
+           reflects a wide variety of decision-boundary alignment between the two
+           tree variants.}
+  \label{fig:hist_gRA}
+\end{figure}
+
+Figure~\ref{fig:scatter_gRA_accdiff} shows the relationship between gRA and accuracy difference. A moderate positive correlation of $r = 0.516$ was observed, meaning that datasets where the two trees were geometrically similar tended to show smaller accuracy penalties from pruning. This is expected: if pruning does not change the decision boundary substantially across the instance space, it is unlikely to change test accuracy substantially either. However, the large scatter around the regression line confirms that the two measures are not redundant. Datasets with intermediate or high gRA could still produce large negative accuracy differences, and conversely some datasets with low gRA showed near-zero accuracy impact from pruning. These cases motivate the quadrant analysis in Fig.~\ref{fig:quadrants_gRA_accdiff}.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\textwidth]{./img/scatter_gRA_accdiff_corrected.png}
+  \caption{Scatter plot of gRA versus accuracy difference ($r = 0.516$). The positive
+           trend indicates that higher geometric alignment is associated with smaller
+           accuracy penalties, but the wide scatter shows that the two measures are
+           complementary.}
+  \label{fig:scatter_gRA_accdiff}
+\end{figure}
+
+Figure~\ref{fig:quadrants_gRA_accdiff} partitions datasets by the medians of gRA ($\approx 0.53$) and $|\Delta\text{acc}|$ ($\approx 0.15$). The largest cluster was the \emph{high $|\Delta\text{acc}|$, low gRA} quadrant (red, $n=31$): on these datasets pruning changed both the decision boundary globally and test accuracy visibly. This is the expected outcome when the problem has complex boundaries and sufficient training data to grow a deep unpruned tree. The \emph{low $|\Delta\text{acc}|$, high gRA} quadrant (green, $n=31$) contained datasets where the two trees were both globally aligned and accuracy-equivalent, consistent with problems whose decision boundaries are simple and well-captured by either tree.
+
+The two quadrants of particular interest are those where accuracy and geometric alignment are inconsistent. The \emph{high $|\Delta\text{acc}|$, high gRA} quadrant (blue, $n=15$) identified datasets where a large fraction of the instance space was classified identically by both trees, yet test accuracy differed substantially. This indicates that the disagreement between the models was concentrated in the region of the instance space covered by the test set, a configuration that geometric alignment alone would not flag. The \emph{low $|\Delta\text{acc}|$, low gRA} quadrant (yellow, $n=15$) was the least populated, which is consistent with the expectation that globally misaligned models are unlikely to produce equivalent test accuracy by chance. These results demonstrate that gRA and accuracy difference provide different and complementary perspectives on model similarity, and that neither measure alone is sufficient to characterise the relationship between two models.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.75\textwidth]{./img/quadrants_gRA_accdiff_corrected.png}
+  \caption{Quadrant analysis of gRA and $|\Delta\text{acc}|$ (dashed lines at their
+           medians). The dominant quadrants are high $|\Delta\text{acc}|$/low gRA and low
+           $|\Delta\text{acc}|$/high gRA (31 datasets each). The blue quadrant identifies the
+           critical case where high geometric alignment coexists with large accuracy
+           differences.}
+  \label{fig:quadrants_gRA_accdiff}
+\end{figure}
+
+
+%--------------------------------------------------------------------
+\subsection{E2: gRA and Distributional RA}
+%--------------------------------------------------------------------
+
+Figure~\ref{fig:hist_dRA} shows the distribution of dRA. In contrast to gRA, dRA was concentrated towards higher values, with notable mass above $0.7$ and a secondary peak near $1.0$. This difference in location indicates that the pruned and unpruned trees tended to agree more on the observed test data than across the full instance space. Since the test set is a sample drawn from the data-generating distribution, dRA is higher in regions where training data is dense, precisely the regions where both trees are likely to have learned the same boundary. Geometric alignment, by weighting all regions of the instance space equally, is thus a stricter criterion than distributional alignment.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\textwidth]{./img/hist_dRA_corrected.png}
+  \caption{Distribution of dRA across 92 datasets. Values are concentrated towards
+           higher agreement relative to gRA (Fig.~\ref{fig:hist_gRA}), indicating
+           that models agree more on observed data than across the full instance space.}
+  \label{fig:hist_dRA}
+\end{figure}
+
+Figure~\ref{fig:scatter_gRA_dRA} shows the relationship between gRA and dRA. A strong positive correlation of $r = 0.745$ was observed, confirming that the two measures capture related but distinct aspects of alignment. Notably, several datasets exhibited high dRA (above $0.8$) alongside low gRA (below $0.3$). These are cases where the two trees agreed on the test partition while differing substantially over most of the instance space, precisely the scenario illustrated in Fig.~\ref{fig:dif-dist-geom-align}. Relying solely on dRA in such cases would lead to an overestimate of structural model similarity. Conversely, no dataset showed high gRA with low dRA, which is consistent with the change-of-measure relationship between the two quantities derived in Sect.~\ref{sec:variants}: if two models agree across the whole space uniformly, they must also agree on any subsample of it, including the test set.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.7\textwidth]{./img/scatter_gRA_dRA_corrected.png}
+  \caption{Scatter plot of gRA versus dRA ($r = 0.745$). Despite the strong overall
+           trend, several datasets show high dRA with low gRA, identifying cases where
+           distributional alignment overestimates global structural similarity.}
+  \label{fig:scatter_gRA_dRA}
+\end{figure}
+
+Taken together, these results suggest that gRA and dRA are complementary measures.
+A high dRA alone is not sufficient to conclude that two models are structurally similar, as it may simply reflect the concentration of observed data in a region where the models happen to agree. Geometric alignment, by sampling uniformly from the instance space, provides a more complete and distribution-independent view of the similarity between decision boundaries.
+
+\emph{On the validity of the estimator.} E1 and E2 above use the corrected, valid-categorical QMC estimator of Sect.~\ref{sec:alignment-estimation}, rather than the plain Monte Carlo estimator over a naive continuous relaxation of the one-hot encoding used in an earlier version of this study. We recomputed both experiments with that invalid procedure to quantify its impact: the correlations changed only marginally ($r=0.514\rightarrow0.516$ for gRA vs.\ accuracy difference, $r=0.745\rightarrow0.745$ for gRA vs.\ dRA), medians shifted by less than $0.01$, and every dataset fell in the identical quadrant of Fig.~\ref{fig:quadrants_gRA_accdiff} under both estimators. This indicates that the substantive conclusions of E1--E2 were not an artifact of the invalid categorical sampling, while the corrected estimator removes any remaining doubt about it.
+
+%--------------------------------------------------------------------
+\subsection{E3: Shift-Robustness and the Total-Variation Bound}
+\label{sec:e3}
+%--------------------------------------------------------------------
+
+Section~\ref{sec:variants} showed that, for any reference distribution $P$ over $\mathcal{F}$, the gap between dRA computed under $P$ and gRA is bounded above by the total variation distance between $P$ and the uniform reference $U(\mathcal{F})$, since the compared indicator function is bounded in $[0,1]$. That statement is not directly testable, since it involves $\mathrm{TV}(P, U(\mathcal{F}))$, the distance between the unknown data-generating distribution and the uniform reference, which cannot itself be estimated without already knowing the density $p(x)$. An empirically testable corollary follows instead from applying the same bound to two distributions we do control: the original test distribution $P_0$ and the $\beta$-tilted distribution $P_\beta$ of Sect.~\ref{sec:shift-protocol}. Writing $\mathrm{gap}(\beta) = |\mathrm{dRA}_\beta - \mathrm{gRA}|$, the triangle inequality gives
+
+\begin{align}
+  \mathrm{gap}(\beta) &= \bigl|\mathrm{dRA}_\beta - \mathrm{gRA}\bigr| \notag \\
+  &\le \bigl|\mathrm{dRA}_\beta - \mathrm{dRA}_0\bigr| + \bigl|\mathrm{dRA}_0 - \mathrm{gRA}\bigr| \notag \\
+  &\le \mathrm{TV}(P_\beta, P_0) + \mathrm{gap}(0) \notag \\
+  &= \widehat{\mathrm{TV}}(\beta) + \mathrm{gap}(0), \label{eq:corollary}
+\end{align}
+
+so that the growth of the gap beyond its own baseline at $\beta=0$, $\Delta\mathrm{gap}(\beta) := \mathrm{gap}(\beta) - \mathrm{gap}(0)$, is bounded by the realised shift alone, $\Delta\mathrm{gap}(\beta) \le \widehat{\mathrm{TV}}(\beta)$. Unlike $\mathrm{TV}(P, U(\mathcal{F}))$, the right-hand side is directly computable from Eq.~\eqref{eq:tvhat}, since $P_\beta$ is obtained from $P_0$ through tilting weights we choose ourselves. We instantiate and test this corollary in two complementary settings, both following the protocol of Sect.~\ref{sec:setup}: the full 92-dataset UCI collection with the tree, SVM and logistic-regression/MLP pairs, and a single, substantially higher-dimensional case study on MNIST that substitutes a TabPFN/MLP pair for the logistic-regression/MLP one (Sect.~\ref{sec:mnist-protocol}).
+
+\paragraph{Bound validity across the UCI sweep.} Pooled across the 92 datasets, the three pairs, the five folds and the four non-trivial shift levels, $\Delta\mathrm{gap}(\beta)$ tracks $\widehat{\mathrm{TV}}(\beta)$ closely and positively, and the corollary holds for the large majority of the resulting triples (Table~\ref{tab:e3-summary}), uniformly so across all three pairs despite their sharing nothing beyond the same shift protocol and the same QMC estimator. The handful of exceptions carry only a small margin over the bound and are consistent with the combined estimation noise of the resampled dRA and of the Wilson-interval gRA, rather than with a genuine failure of the inequality. Figure~\ref{fig:gap_vs_tv} shows this directly: plotting every realised shift against its corresponding gap growth, including the trivial $\beta=0$ points that collapse to the origin by construction, the point cloud sits on or just below the bound's diagonal throughout, and its upper envelope tracks that diagonal as the shift grows, indicating that the bound is not merely satisfied but reasonably tight rather than vacuous. Correlation strength differs somewhat between pairs, weakest for the SVM pair and strongest for the logistic-regression/MLP pair, but the bound itself is comfortably satisfied in every case, so this spread reflects how closely the gap tracks the realised shift rather than any difference in how often the corollary holds.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=0.75\textwidth]{./img/gap_vs_TV_corrected.png}
+\caption{$\Delta\mathrm{gap}(\beta) = \mathrm{gap}(\beta) - \mathrm{gap}(0)$ versus the realised shift $\widehat{\mathrm{TV}}(\beta)$, pooled across all 92 datasets, 3 algorithm pairs, 5 folds and all $\beta \in \{0, 0.5, 1, 2, 4\}$ (the $\beta{=}0$ points collapse to the origin by construction). The dashed diagonal is the bound of Eq.~\eqref{eq:corollary}.}
+\label{fig:gap_vs_tv}
+\end{figure}
+
+\begin{table}[tbp]
+\centering
+\caption{Per-pair summary of the UCI shift-robustness experiment. gRA is estimated with the same model-agnostic QMC procedure (Sect.~\ref{sec:alignment-estimation}) for every pair. ``Bound holds'' and Pearson $r$ (for $\Delta\mathrm{gap}(\beta)$ vs.\ $\widehat{\mathrm{TV}}(\beta)$) are computed over $\beta > 0$ only. ``Spurious flips'' is the fraction of datasets with at least one flip at $\tau = 0.7$ (Fig.~\ref{fig:flip-rate}, unaffected by the $\Delta\mathrm{gap}$ correction since it does not involve gRA).}
+\label{tab:e3-summary}
+\begin{tabular}{lccc}
+\toprule
+Algorithm pair & Mean gRA & Bound holds ($\beta{>}0$) & Spurious flips \\
+\midrule
+Tree (pruned vs.\ unpruned) & $0.505$ & $99.1\%$ ($r=0.206$) & $28.3\%$ \\
+SVM (linear vs.\ RBF)       & $0.678$ & $99.9\%$ ($r=0.159$) & $15.2\%$ \\
+LogReg vs.\ MLP             & $0.672$ & $99.7\%$ ($r=0.316$) & $28.3\%$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Decision flips across the UCI sweep.} The bound matters in practice because dRA is the only one of the two measures a practitioner with a fixed deployment sample can actually compute, and it is exactly the one that moves under shift. To quantify the consequence, we classify each dataset-pair combination as \emph{aligned} whenever the unshifted dRA exceeds a fixed threshold of $0.7$ (a per-dataset robustness check using the median RA across the shift grid gave the same qualitative picture), and re-classify at every non-trivial shift level using only the shifted dRA, mimicking a practitioner who monitors a live system without access to gRA. Because gRA, and with it the true decision boundaries of the two models, never changes with $\beta$, any resulting re-classification is spurious by construction: it reflects a change in the observed data rather than in the models being compared. Figure~\ref{fig:flip-rate} shows that this is not a rare occurrence: a substantial share of datasets flip at least once across the shift grid for every pair, somewhat less often for the SVM pair than for the other two, meaning that shift alone, with the underlying models held fixed throughout, is enough to overturn a practitioner's alignment verdict in a non-trivial fraction of cases.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=0.7\textwidth]{./img/flip_rate_by_pair.png}
+\caption{Fraction of datasets, per algorithm pair, exhibiting at least one spurious dRA-based alignment/misalignment flip across the covariate-shift grid $\beta \in \{0.5,1,2,4\}$, relative to the $\beta=0$ classification at $\tau = 0.7$. Every flip is spurious in the sense that gRA, and the underlying models, never changed.}
+\label{fig:flip-rate}
+\end{figure}
+
+\paragraph{A case study on MNIST.} The MNIST setting lets us ask whether this pattern survives outside the tabular UCI collection and outside classical, non-foundation-model classifiers. Table~\ref{tab:mnist-summary} reports, for each pair, accuracy, dRA and gRA at $\beta=0$. The SVM and TabPFN/MLP pairs both reproduce, in a real and rather extreme form, the synthetic scenario of Fig.~\ref{fig:dif-dist-geom-align}: a linear and an RBF SVM are nearly indistinguishable by accuracy and agree on the large majority of real test digits, yet their decision boundaries coincide on only a small fraction of the sampled instance space, an order of magnitude below their distributional agreement. TabPFN outperforms the MLP by a wide accuracy margin and the two still agree on most real digits, but their geometric alignment is scarcely higher than the SVM pair's. Figure~\ref{fig:mnist-dra} makes the resulting gap visually explicit: dRA for both pairs stays high and roughly flat across the whole shift grid, sitting far above each pair's own gRA throughout, so that no amount of covariate shift within this experiment would by itself have revealed how narrow the underlying agreement really is. The tree pair illustrates the opposite, and equally informative, failure mode: the most-aggressive-pruning protocol of Sect.~\ref{sec:setup}, already flagged there as a deliberately extreme and non-validated design choice, collapses the pruned tree's accuracy to near chance on this harder, ten-class problem, and here dRA and gRA agree with each other that the two trees are genuinely different, rather than diverging as in the other two pairs. Its inclusion is a useful contrast: RA does not manufacture a gap between the two measures whenever a pair of models happens to disagree, it reports one only when the data and the broader instance space genuinely tell different stories.
+
+\begin{table}[tbp]
+\centering
+\caption{MNIST case study: accuracy, dRA, and gRA at $\beta=0$, averaged over 5 folds. $\Delta$acc $= \mathrm{acc}_B - \mathrm{acc}_A$.}
+\label{tab:mnist-summary}
+\begin{tabular}{lcccc}
+\toprule
+Algorithm pair & acc$_A$ & acc$_B$ & dRA & gRA \\
+\midrule
+Tree (pruned vs.\ unpruned)   & $0.634$ & $0.216$ & $0.218$ & $0.194$ \\
+SVM (linear vs.\ RBF)         & $0.873$ & $0.882$ & $0.887$ & $0.102$ \\
+TabPFN vs.\ MLP                & $0.912$ & $0.834$ & $0.868$ & $0.226$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=0.75\textwidth]{./img/mnist_dRA_vs_beta.png}
+\caption{MNIST case study: dRA($\beta$) across the shift grid (solid lines) against each pair's gRA (dotted horizontal lines, shift-invariant by construction). For the SVM and TabPFN/MLP pairs, dRA remains far above gRA throughout, illustrating a real instance of the high-dRA/low-gRA fragility pattern of Sect.~\ref{sec:disc-alig-vs-acc}.}
+\label{fig:mnist-dra}
+\end{figure}
+
+\paragraph{Bound validity and decision flips on MNIST.} Applying the corollary of Eq.~\eqref{eq:corollary} to this dataset, across the three pairs, five folds and four non-trivial shift levels, the bound holds for every resulting triple (Fig.~\ref{fig:mnist-bound}). This result is itself the reason the corollary is stated the way it is above: an earlier version of this experiment tested the uncorrected form of the bound, without the $\mathrm{gap}(0)$ term, and found it satisfied in only a minority of triples on this dataset. That discrepancy is what drew our attention to the missing term, rather than to any weakness specific to MNIST, and prompted the correction reported above rather than a claim that this dataset behaves unusually well. The pooled correlation between $\Delta\mathrm{gap}(\beta)$ and $\widehat{\mathrm{TV}}(\beta)$ is weak and not statistically significant at this sample size, which is unsurprising: a single dataset offers far less statistical power than the pooled UCI test above, and the case study was never intended to establish a trend on its own, only to check that the bound continues to hold where the UCI sweep cannot reach. At the fixed threshold, no pair's alignment classification flips across the shift grid on this dataset, since dRA stays on the same side of the threshold throughout for all three; at the per-dataset median threshold, every pair flips at least once, the same self-referential-threshold artifact already noted for the UCI sweep.
+
+\begin{figure}[tbp]
+\centering
+\includegraphics[width=0.7\textwidth]{./img/mnist_gap_vs_TV.png}
+\caption{MNIST case study: $\Delta\mathrm{gap}(\beta)$ versus $\widehat{\mathrm{TV}}(\beta)$ for all three pairs, all 5 folds, and $\beta \in \{0.5,1,2,4\}$. Every point falls on or below the bound.}
+\label{fig:mnist-bound}
+\end{figure}
+
+\paragraph{Synthesis.} Taken together, the two settings answer the same two questions from different directions. Whether the total-variation relationship between dRA and gRA can be instantiated and tested empirically, rather than asserted informally, is answered by the UCI sweep, where the corollary holds almost without exception across ninety-two datasets and three unrelated hypothesis languages. Whether the paper's central claims, and the practical risk they imply, extend past the setting in which they were first observed is answered by the MNIST case study, where the same bound holds exactly, and where the high-dRA, low-gRA fragility pattern the theory predicts turns out to be not a synthetic curiosity but a large, real effect once the discriminative signal genuinely occupies a small corner of a much larger instance space. We do not read the single MNIST dataset as re-establishing generality on its own; that claim rests on the ninety-two-dataset sweep. Its role is narrower, and we think still useful: a stress test chosen specifically to be harder, higher-dimensional and more architecturally unusual than anything in the main collection, on which the corrected bound holds cleanly and the phenomenon RA is designed to expose shows up in an unusually stark form.
+
+%--------------------------------------------------------------------
+\section{Conclusion}
+\label{sec:conclusion}
+%--------------------------------------------------------------------
+
+In this paper, we introduced Geometric Rashomon Alignment (gRA), a measure to quantify the alignment between the decision boundaries defined by different models, using data uniformly sampled from the instance space defined by the attribute domains. Through extensive experiments on 92 datasets, comparing pruned and unpruned decision trees, we show that RA complements the evaluation of predictive performance of models as well as their distributional alignment, that is, alignment computed on a sample of observed data. We further show that gRA can be estimated with a single, model-agnostic quasi-Monte Carlo procedure, Sobol sampling with Wilson confidence intervals, that treats $M_A$ and $M_B$ as black boxes and respects mixed numerical and categorical domains, applying identically to decision trees and to arbitrary classifiers. Building on this estimator, we derived and instantiated an empirically testable, total-variation corollary of the dRA/gRA bound (Eq.~\eqref{eq:corollary}), and showed that it holds almost without exception under controlled covariate-shift induction, both across the 92-dataset sweep and on a single, substantially higher-dimensional case study on MNIST that additionally swaps in a tabular foundation model, TabPFN, in place of one classical pair. Both the qualitative and quantitative conclusions of our analysis hold not only for pruned-versus-unpruned trees but also for a linear-versus-RBF SVM pair, a logistic-regression-versus-MLP pair, and, in the MNIST case study, a TabPFN-versus-MLP pair. In practice, our shift experiments show that relying on dRA alone under covariate shift can lead a practitioner to spuriously reclassify a stable pair of models as newly aligned or misaligned in a substantial share of UCI datasets, depending on the algorithm pair, even though the models themselves never changed. On MNIST the same blind spot appears in an even starker form: two SVMs, and separately TabPFN paired with an MLP, agree on the large majority of real test digits while their decision boundaries coincide on only a small fraction of the broader instance space, a risk that monitoring gRA alongside dRA would avoid by construction.
+Future work includes a broader sweep of higher-dimensional and foundation-model comparisons in the style of the MNIST case study of Sect.~\ref{sec:e3}, the definition of other methods to sample from the instance space, and hybrid measures that interpolate between dRA and gRA under an intermediate reference distribution.
+
+
+% Acknowledgements (uncomment and fill in as needed)
+\section*{Acknowledgements}
+This work is a result of Agenda “Center for Responsible AI”, nr. C645008882-00000055, investment project nr. 62, financed by the Recovery and Resilience Plan (PRR) and by European Union -  NextGeneration EU. Funded by the European Union – NextGenerationEU. Views and opinions expressed are however those of the author(s) only and do not necessarily reflect those of the European Union or the European Commission. Neither the European Union nor the European Commission can be held responsible for them.
+AISym4Med (101095387) supported by Horizon Europe Cluster 1: Health, ConnectedHealth (n.o 46858), supported by Competitiveness and Internationalisation Operational Programme (POCI) and Lisbon Regional Operational Programme (LISBOA 2020), under the PORTUGAL 2020 Partnership Agreement, through the European Regional Development Fund (ERDF).
+This work was financially supported by: UID/00027 of the LIACC - Artificial Intelligence and Computer Science Laboratory - funded by Fundação para a Ciência e a Tecnologia, I.P./ MCTES through the national funds.
+
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}

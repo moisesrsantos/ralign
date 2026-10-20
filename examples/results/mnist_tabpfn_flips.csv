@@ -1,0 +1,4 @@
+dataset,pair,spurious_flip_tau_fixed,spurious_flip_tau_median
+mnist,svm_linear_vs_rbf,False,True
+mnist,tabpfn_vs_mlp,False,True
+mnist,tree_pruned_vs_unpruned,False,True

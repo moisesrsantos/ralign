@@ -72,14 +72,19 @@ class RashomonAlignment:
         lower-variance coverage of the instance space than i.i.d. uniform draws.
         """
         X = df.copy()
-        if numeric_cols is None:
+        if numeric_cols is None and categorical_cols is None:
             numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
-        if categorical_cols is None:
-            categorical_cols = [c for c in X.columns if X[c].dropna().nunique() == 2]
-        numeric_cols = [c for c in numeric_cols if c not in set(categorical_cols)]
-        categorical_cols = [c for c in X.columns if c in set(categorical_cols)] or [
-            c for c in X.columns if c not in set(numeric_cols)
-        ]
+            # binary numeric columns (e.g. 0/1 flags) are sampled as categories,
+            # not interpolated as a continuous range
+            binary_numeric = [c for c in numeric_cols if X[c].dropna().nunique() == 2]
+            numeric_cols = [c for c in numeric_cols if c not in binary_numeric]
+            categorical_cols = [c for c in X.columns if c not in numeric_cols]
+        elif numeric_cols is None:
+            numeric_cols = [c for c in X.columns if c not in categorical_cols]
+        elif categorical_cols is None:
+            categorical_cols = [c for c in X.columns if c not in numeric_cols]
+        numeric_cols = list(numeric_cols)
+        categorical_cols = list(categorical_cols)
 
         d = len(numeric_cols) + len(categorical_cols)
         sampler = qmc.Sobol(d=max(d, 1), scramble=True, seed=seed)
